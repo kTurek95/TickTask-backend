@@ -1,0 +1,25 @@
+# Wirtualne środowisko
+venv/
+ENV/
+env/
+.venv/
+
+# Pliki środowiskowe
+.env
+
+# Pliki systemowe
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.log
+
+# Migrations cache
+**/migrations/__pycache__/
+
+# VS Code / IDE
+.vscode/
+.idea/
+
+# Pliki systemowe
+.DS_Store
+Thumbs.db
