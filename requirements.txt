@@ -12,3 +12,4 @@ django-extensions
 gunicorn
 dj-database-url
 django-grappelli
+whitenoise
