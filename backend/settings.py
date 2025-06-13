@@ -62,7 +62,6 @@ INSTALLED_APPS = [
     "django_extensions",
     "chat",
     "grappelli",
-    'django.contrib.staticfiles',
 ]
 
 MIDDLEWARE = [
