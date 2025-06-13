@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "django_extensions",
     "chat",
+    "grapelli",
 ]
 
 MIDDLEWARE = [
