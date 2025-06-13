@@ -11,3 +11,4 @@ python-dotenv
 django-extensions
 gunicorn
 dj-database-url
+django-grapelli
