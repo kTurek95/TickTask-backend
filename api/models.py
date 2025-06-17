@@ -42,18 +42,20 @@ class Task(models.Model):
     
     
     def save(self, *args, **kwargs):
-        now = timezone.now()
-        if self.is_completed:
-            self.status = 'completed'
-        elif self.deadline:
-            if self.deadline < now:
-                self.status = 'overdue'
+        if not self.status:
+            now = timezone.now()
+            if self.is_completed:
+                self.status = 'completed'
+            elif self.deadline:
+                if self.deadline < now:
+                    self.status = 'overdue'
+                else:
+                    self.status = 'upcoming'
             else:
-                self.status = 'upcoming'
-        else:
-            self.status = 'in_progress'
+                self.status = 'in_progress'
 
         super().save(*args, **kwargs)
+
 
     
 class Schedule(models.Model):
