@@ -20,6 +20,15 @@ class NoteSerializer(serializers.ModelSerializer):
         model = Note
         fields = ["id", "title", "content", "created_at", "author"]
         extra_kwargs = {"author": {"read_only": True}}
+        
+
+STATUS_LABELS = {
+    "in_progress": "W toku",
+    "completed": "Ukończone",
+    "overdue": "Po terminie",
+    "upcoming": "Nadchodzące",
+    "all": "Wszystkie"
+    }
 
 class TaskSerializer(serializers.ModelSerializer):
     created_by = serializers.StringRelatedField(read_only=True)
@@ -36,7 +45,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "is_completed", "created_at", "deadline",
             "priority", "created_by", "assigned_to", "assigned_to_id", 'recent_comments', 'status'
         ]
-        read_only_fields = ["id", "created_at", "created_by", "assigned_to", "user", "status"]
+        read_only_fields = ["id", "created_at", "created_by", "assigned_to", "user"]
 
     def create(self, validated_data):
         request = self.context.get("request")
@@ -50,6 +59,37 @@ class TaskSerializer(serializers.ModelSerializer):
         validated_data["created_by"] = user
 
         return super().create(validated_data)
+    
+    def validate_status(self, value):
+        allowed_statuses = list(STATUS_LABELS.keys())
+        if value not in allowed_statuses:
+            raise serializers.ValidationError("Nieprawidłowy status zadania.")
+        return value
+    
+
+    def update(self, instance, validated_data):
+        request = self.context.get("request")
+        user = request.user
+
+        old_status = instance.status
+        new_status = validated_data.get("status")
+
+        updated_task = super().update(instance, validated_data)
+
+        if new_status and new_status != old_status:
+            old_label = STATUS_LABELS.get(old_status, old_status)
+            new_label = STATUS_LABELS.get(new_status, new_status)
+
+            Activity.objects.create(
+                user=instance.assigned_to,
+                source_user=user,
+                action=(
+                    f"Status zadania '{instance.title}' został zmieniony "
+                    f"z '{old_label}' na '{new_label}'."
+                )
+            )
+
+        return updated_task
     
     def get_recent_comments(self, obj):
         recent = obj.comments.order_by('-created_at')[:2]

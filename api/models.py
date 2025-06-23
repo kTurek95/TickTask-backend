@@ -35,26 +35,25 @@ class Task(models.Model):
     deadline = models.DateTimeField(null=True, blank=True)
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default="Średni")  # <- DODANE
     assigned_to = models.ForeignKey(User, on_delete=models.CASCADE, related_name='assigned_tasks')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='in_progress')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='upcoming')
 
     def __str__(self):
         return f"{self.title} ({self.user.username})"
     
     
+    from django.utils import timezone
+
     def save(self, *args, **kwargs):
-        if not self.status:
+        if self._state.adding and not self.status:
             now = timezone.now()
             if self.is_completed:
                 self.status = 'completed'
-            elif self.deadline:
-                if self.deadline < now:
-                    self.status = 'overdue'
-                else:
-                    self.status = 'upcoming'
+            elif self.deadline and self.deadline < now:
+                self.status = 'overdue'
             else:
-                self.status = 'in_progress'
-
+                self.status = 'upcoming'
         super().save(*args, **kwargs)
+
 
 
     

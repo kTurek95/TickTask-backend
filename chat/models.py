@@ -26,7 +26,7 @@ class ConversationSeen(models.Model):
     last_seen = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        unique_together = ('conversation', 'user')  # 1 rekord dla 1 rozmowy i użytkownika
+        unique_together = ('conversation', 'user')
 
     def __str__(self):
         return f"{self.user.username} saw {self.conversation.id} at {self.last_seen}"

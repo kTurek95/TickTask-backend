@@ -222,22 +222,29 @@ class TaskStatsView(APIView):
 
     def get(self, request):
         user = request.user
-        
-        now=timezone.now()
+        now = timezone.now()
+
+        # ✅ Automatyczna zmiana na "po_terminie", tylko dla NIEukończonych zadań
+        Task.objects.filter(
+            assigned_to=user,
+            is_completed=False,
+            deadline__lt=now
+        ).exclude(status="overdue").exclude(status="completed").update(status="overdue")
 
         assigned_tasks = Task.objects.filter(assigned_to=user)
 
         total = assigned_tasks.count()
-        completed = assigned_tasks.filter(is_completed=True).count()
-        overdue = assigned_tasks.filter(is_completed=False, deadline__lt=now).count()
-        upcoming = assigned_tasks.filter(is_completed=False, deadline__gte=now).count()
+        completed = assigned_tasks.filter(status="completed").count()
+        in_progress = assigned_tasks.filter(status="in_progress").count()
+        overdue = assigned_tasks.filter(status="overdue").count()
+        upcoming = assigned_tasks.filter(status="upcoming").count()
 
         priority_counts = dict(Counter(assigned_tasks.values_list("priority", flat=True)))
-
 
         return Response({
             "total": total,
             "completed": completed,
+            "in_progress": in_progress,
             "overdue": overdue,
             "upcoming": upcoming,
             "priority_stats": priority_counts
@@ -271,8 +278,10 @@ class TaskSummaryView(APIView):
             user_tasks = Task.objects.filter(assigned_to=user)
             total = user_tasks.count()
             completed = user_tasks.filter(is_completed=True).count()
-            overdue = user_tasks.filter(deadline__lt=timezone.now(), is_completed=False).count()
-            upcoming = user_tasks.filter(deadline__gte=timezone.now(), is_completed=False).count()
+            overdue = user_tasks.filter(status="overdue").count()
+            upcoming = user_tasks.filter(status="upcoming").count()
+            in_progress = user_tasks.filter(status="in_progress").count()
+            completed = user_tasks.filter(status="completed").count()
 
             priority_stats = {
                 "Wysoki": user_tasks.filter(priority="Wysoki").count(),
@@ -287,6 +296,7 @@ class TaskSummaryView(APIView):
                 "completed": completed,
                 "overdue": overdue,
                 "upcoming": upcoming,
+                "in_progress": in_progress,
                 "priority_stats": priority_stats,
             })
 
