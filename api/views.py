@@ -286,9 +286,9 @@ class TaskSummaryView(APIView):
             completed = user_tasks.filter(status="completed").count()
 
             priority_stats = {
-                "Wysoki": user_tasks.filter(priority="Wysoki").count(),
-                "Średni": user_tasks.filter(priority="Średni").count(),
-                "Niski": user_tasks.filter(priority="Niski").count(),
+                "Wysoki": user_tasks.filter(priority="Wysoki").exclude(status="completed").count(),
+                "Średni": user_tasks.filter(priority="Średni").exclude(status="completed").count(),
+                "Niski": user_tasks.filter(priority="Niski").exclude(status="completed").count(),
             }
 
             data.append({
