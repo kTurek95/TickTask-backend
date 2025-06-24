@@ -74,7 +74,9 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        return Task.objects.all() if user.is_staff else Task.objects.filter(assigned_to=user)
+        base_qs = Task.objects.all() if user.is_staff else Task.objects.filter(assigned_to=user)
+        return base_qs.order_by('deadline').reverse()
+
 
     def get_serializer_context(self):
         return {"request": self.request}
