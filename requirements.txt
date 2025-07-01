@@ -13,3 +13,5 @@ gunicorn
 dj-database-url
 django-grappelli
 whitenoise
+django-storages
+boto3
