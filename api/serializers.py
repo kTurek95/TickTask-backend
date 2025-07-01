@@ -1,18 +1,27 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import Note, Task, Schedule, Comment, Activity
+from .models import Note, Task, Schedule, Comment, Activity, UserProfile
 
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProfile
+        fields = ['role']
 
 class UserSerializer(serializers.ModelSerializer):
+    profile = UserProfileSerializer(source='userprofile', read_only=True)
+    is_staff = serializers.BooleanField(read_only=True)  # ✅ DODAJ TO
+
     class Meta:
         model = User
-        fields = ["id", "username", "password", "email"]
+        fields = ["id", "username", "password", "email", "profile", "is_staff"]
         extra_kwargs = {"password": {"write_only": True}}
 
     def create(self, validated_data):
         print(validated_data)
         user = User.objects.create_user(**validated_data)
         return user
+
 
 
 class NoteSerializer(serializers.ModelSerializer):
@@ -51,8 +60,12 @@ class TaskSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         user = request.user
 
-        # Przypisz zadanie do siebie, jeśli nie jest podane assigned_to
-        if not user.is_staff or "assigned_to" not in validated_data:
+        # Sprawdź, czy leader lub zwykły user
+        is_admin = user.is_staff
+        is_leader = hasattr(user, "userprofile") and user.userprofile.role == "leader"
+
+        # Jeśli NIE admin i NIE leader – przypisz do siebie
+        if not (is_admin or is_leader) or "assigned_to" not in validated_data:
             validated_data["assigned_to"] = user
 
         validated_data["user"] = user

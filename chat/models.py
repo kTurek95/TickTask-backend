@@ -3,19 +3,29 @@ from django.contrib.auth.models import User
 
 class Conversation(models.Model):
     participants = models.ManyToManyField(User, related_name='conversations')
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='created_conversations',
+        null=True,
+        blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     is_group = models.BooleanField(default=False)
     group_name = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
+        if self.is_group and self.group_name:
+            return f"Group: {self.group_name} (ID: {self.id})"
         return f"Conversation {self.id}"
 
 class ChatMessage(models.Model):
-    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='messages')
+    conversation = models.ForeignKey('Conversation', on_delete=models.CASCADE, related_name='messages')
     sender = models.ForeignKey(User, on_delete=models.CASCADE)
-    text = models.TextField()
+    text = models.TextField(blank=True)
+    attachment = models.FileField(upload_to='chat_attachments/', blank=True, null=True)
     timestamp = models.DateTimeField(auto_now_add=True)
-
+    
     def __str__(self):
         return f"{self.sender.username}: {self.text[:20]}"
     

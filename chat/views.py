@@ -1,4 +1,4 @@
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions, viewsets
 from .models import ChatMessage, Conversation, ConversationSeen
 from .serializers import ChatMessageSerializer, ConversationSerializer
 from rest_framework.views import APIView
@@ -22,9 +22,13 @@ class ChatMessageListCreateView(generics.ListCreateAPIView):
         return conversation.messages.order_by('timestamp')
 
     def perform_create(self, serializer):
+        print("FILES:", self.request.FILES)
+        print("DATA:", self.request.data)
         conversation = Conversation.objects.get(id=self.kwargs['conversation_id'])
-        serializer.save(sender=self.request.user, conversation=conversation)
-
+        serializer.save(
+            sender=self.request.user,
+            conversation=conversation
+        )
         
 class ConversationListCreateView(generics.ListCreateAPIView):
     queryset = Conversation.objects.all()
@@ -57,19 +61,19 @@ class GetOrCreateConversationView(APIView):
             return Response({"error": "At least 1 participant required"}, status=400)
 
         participants = list(map(int, participants))
-        # Dodaj aktualnego użytkownika do zestawu uczestników (automatycznie)
-        participants.append(request.user.id)
-        unique_participants = list(set(participants))  # usuwanie duplikatów
+        participants.append(request.user.id)  # dodaj siebie
+        unique_participants = list(set(participants))
 
         users = User.objects.filter(id__in=unique_participants)
         if users.count() != len(unique_participants):
             return Response({"error": "Some users not found"}, status=404)
 
         if is_group:
-            # Tworzenie nowej rozmowy grupowej
+            # 🔑 Tworzenie nowej rozmowy grupowej z created_by
             new_convo = Conversation.objects.create(
                 is_group=True,
-                group_name=group_name
+                group_name=group_name,
+                created_by=request.user  # <- to jest KLUCZ!
             )
             new_convo.participants.set(users)
             serializer = ConversationSerializer(new_convo, context={"request": request})
@@ -81,18 +85,20 @@ class GetOrCreateConversationView(APIView):
 
             participants_set = set(unique_participants)
 
-            # Szukaj istniejącej rozmowy 1:1
             for convo in Conversation.objects.filter(is_group=False):
                 convo_set = set(convo.participants.values_list("id", flat=True))
                 if convo_set == participants_set:
                     serializer = ConversationSerializer(convo, context={"request": request})
                     return Response(serializer.data)
 
-            # Nie znaleziono — utwórz nową
-            new_convo = Conversation.objects.create(is_group=False)
+            new_convo = Conversation.objects.create(
+                is_group=False,
+                created_by=request.user  # możesz dać to t  eż tu dla spójności
+            )
             new_convo.participants.set(users)
             serializer = ConversationSerializer(new_convo, context={"request": request})
             return Response(serializer.data, status=201)
+
 
 
     
@@ -151,32 +157,33 @@ class GroupConversationsView(generics.ListAPIView):
             is_group=True
         )
         
-
 class SendMessageView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, conversation_id):
         user = request.user
-        text = request.data.get('text')
-
-        if not text:
-            return Response({'error': 'Text is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             conversation = Conversation.objects.get(id=conversation_id)
         except Conversation.DoesNotExist:
-            return Response({'error': 'Conversation not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'error': 'Conversation not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
         if user not in conversation.participants.all():
-            return Response({'error': 'Not a participant of this conversation'}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {'error': 'Not a participant of this conversation'},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
-        ChatMessage.objects.create(
-            conversation=conversation,
-            sender=user,
-            text=text
-        )
-
-        return Response({'status': 'Message sent'}, status=status.HTTP_201_CREATED)
+        # ✅ UŻYJ SERIALIZERA!
+        serializer = ChatMessageSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(sender=user, conversation=conversation)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class ChatMessageDetailView(APIView):
@@ -194,3 +201,21 @@ class ChatMessageDetailView(APIView):
         messages = ChatMessage.objects.filter(conversation=conversation).order_by('timestamp')
         serializer = ChatMessageSerializer(messages, many=True)
         return Response(serializer.data)
+
+
+class ConversationViewSet(viewsets.ModelViewSet):
+    queryset = Conversation.objects.all()
+    serializer_class = ConversationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def destroy(self, request, *args, **kwargs):
+        conversation = self.get_object()
+
+        if not conversation.is_group:
+            return Response({"error": "Nie można usuwać czatu prywatnego."}, status=400)
+
+        if request.user.is_staff or request.user in conversation.participants.all():
+            conversation.delete()
+            return Response(status=204)
+
+        return Response({"error": "Brak uprawnień."}, status=403)
