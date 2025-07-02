@@ -99,7 +99,17 @@ class GetOrCreateConversationView(APIView):
             serializer = ConversationSerializer(new_convo, context={"request": request})
             return Response(serializer.data, status=201)
 
+class GroupViewSet(viewsets.ModelViewSet):
+    queryset = Conversation.objects.filter(is_group=True)
+    serializer_class = ConversationSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
+    def destroy(self, request, *args, **kwargs):
+        group = self.get_object()
+        if group.created_by_id != request.user.id and not request.user.is_staff:
+            return Response({"detail": "Brak uprawnień"}, status=403)
+        group.delete()
+        return Response(status=204)
 
     
     

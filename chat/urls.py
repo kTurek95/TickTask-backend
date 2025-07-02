@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import ChatMessageListCreateView, ConversationListCreateView, GetOrCreateConversationView, UnreadMessageCountView, UpdateLastSeenView, GroupConversationsView
 from rest_framework.routers import DefaultRouter
-from .views import SendMessageView, ChatMessageDetailView, ConversationViewSet
+from .views import SendMessageView, ChatMessageDetailView, ConversationViewSet, GroupViewSet
 
 urlpatterns = [
     path('chat/<int:conversation_id>/messages/', ChatMessageListCreateView.as_view(), name='chat-messages'),
@@ -18,6 +18,7 @@ urlpatterns = [
 
 router = DefaultRouter()
 router.register(r'conversations', ConversationViewSet, basename='conversation')
+router.register(r'groups', GroupViewSet, basename='group')
 
 urlpatterns += router.urls
 
