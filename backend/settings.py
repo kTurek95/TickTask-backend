@@ -32,6 +32,13 @@ DEBUG = os.environ.get("DEBUG", "False") == "True"
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
+
+# ---- Maile ----
+
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'noreply@ticktask.local'
+
+
 from datetime import timedelta
 
 REST_FRAMEWORK = {
@@ -62,6 +69,7 @@ INSTALLED_APPS = [
     "chat",
     "grappelli",
     "storages",
+    'django_q',
 ]
 
 MIDDLEWARE = [
@@ -121,6 +129,26 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
+
+Q_CLUSTER = {
+    'name': 'TickTask',
+    'workers': 8,        # więcej workerów = więcej równoległych zadań
+    'retry': 120,
+    'timeout': 60,
+    'queue_limit': 200,  # większa kolejka
+    'bulk': 20,          # worker bierze 20 zadań naraz
+    'orm': 'default',
+}
+
+
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND')
+EMAIL_HOST = os.getenv('EMAIL_HOST')
+EMAIL_PORT = os.getenv('EMAIL_PORT')
+# EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS')
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL')
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"

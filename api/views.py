@@ -12,6 +12,8 @@ from django.utils import timezone
 from collections import Counter
 from .utils import log_activity
 from rest_framework import status
+from django.core.mail import send_mail
+
 
 class NoteListCreate(generics.ListCreateAPIView):
     serializer_class = NoteSerializer
@@ -92,10 +94,14 @@ class TaskViewSet(viewsets.ModelViewSet):
 
         if assigned_to_ids:
             for user_id in assigned_to_ids:
+                
                 serializer = self.get_serializer(data=request.data)
                 serializer.is_valid(raise_exception=True)
 
                 assigned_to_user = User.objects.get(id=user_id)
+                
+                print("Assigned to IDs:", assigned_to_ids)
+                print("Sending mail to:", assigned_to_user.email)
 
                 task = serializer.save(
                     created_by=creator,
@@ -121,6 +127,29 @@ class TaskViewSet(viewsets.ModelViewSet):
                         source_user=creator,
                         action=f"Przydzielono Ci zadanie: {task.title}"
                     )
+                    
+                if assigned_to_user.email:
+                    if creator == assigned_to_user:
+                        # Przypadek: przypisujesz SAM SOBIE
+                        msg = (
+                            f'Cześć {assigned_to_user.username},\n\n'
+                            f'Przypisałeś sobie nowe zadanie: "{task.title}".\n'
+                            f'Sprawdź w TickTask!'
+                        )
+                    else:
+                        # Przypadek: lider przypisuje KOMUŚ
+                        msg = (
+                            f'Cześć {assigned_to_user.username},\n\n'
+                            f'Lider {creator.username} przypisał Ci nowe zadanie: "{task.title}".\n'
+                            f'Sprawdź w TickTask!'
+                        )
+
+                    send_mail(
+                        subject=f'Nowe zadanie: {task.title}',
+                        message=msg,
+                        from_email='noreply@inqse.com',
+                        recipient_list=[assigned_to_user.email],
+                    )
 
             return Response(self.get_serializer(tasks, many=True).data, status=status.HTTP_201_CREATED)
 
@@ -145,8 +174,8 @@ class TaskViewSet(viewsets.ModelViewSet):
             "title": old_task.title,
             "description": old_task.description,
             "deadline": old_task.deadline,
-            "is_completed": old_task.is_completed,
             "priority": old_task.priority,
+            "status": old_task.status,  # <-- DODAJ TO!
         }
 
         updated_task = serializer.save()
@@ -158,17 +187,41 @@ class TaskViewSet(viewsets.ModelViewSet):
             changes.append("zmieniono opis")
         if old_data["deadline"] != updated_task.deadline:
             changes.append("zmieniono termin")
-        if old_data["is_completed"] != updated_task.is_completed:
-            before = "ukończone" if old_data["is_completed"] else "nieukończone"
-            after = "ukończone" if updated_task.is_completed else "nieukończone"
-            changes.append(f"zmieniono status z {before} na {after}")
-        if old_data["priority"] != updated_task.priority:
-            changes.append(f"zmieniono priorytet z {old_data['priority']} na {updated_task.priority}")
+        STATUS_LABELS = {
+            "in_progress": "W toku",
+            "completed": "Ukończone",
+            "overdue": "Po terminie",
+            "upcoming": "Nadchodzące",
+        }
 
-        if changes:
-            log_activity(self.request.user, f"Zadanie '{updated_task.title}' – {', '.join(changes)}")
-            if updated_task.assigned_to != self.request.user:
-                log_activity(updated_task.assigned_to, f"Zadanie '{updated_task.title}' zostało zmodyfikowane – {', '.join(changes)}")
+        if old_data["status"] != updated_task.status:
+            before_status = old_data["status"]
+            after_status = updated_task.status
+
+            pretty_before = STATUS_LABELS.get(before_status, before_status)
+            pretty_after = STATUS_LABELS.get(after_status, after_status)
+
+            changes.append(f"zmieniono status z {pretty_before} na {pretty_after}")
+
+            changer = self.request.user
+
+            if changer == updated_task.created_by:
+                recipient = updated_task.assigned_to
+            else:
+                recipient = updated_task.created_by
+
+            if recipient and recipient.email:
+                send_mail(
+                    subject=f'Status zadania zmieniony: {updated_task.title}',
+                    message=(
+                        f'Cześć {recipient.username},\n\n'
+                        f'{changer.username} zmienił status zadania "{updated_task.title}" '
+                        f'z {pretty_before} na {pretty_after}.\n'
+                        f'Sprawdź w TickTask!'
+                    ),
+                    from_email=None,
+                    recipient_list=[recipient.email],
+                )
 
     def perform_destroy(self, instance):
         log_activity(self.request.user, f"Usunąłeś zadanie: '{instance.title}'")

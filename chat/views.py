@@ -7,6 +7,8 @@ from django.contrib.auth.models import User
 from django.utils.timezone import now
 from rest_framework import status
 from django.utils import timezone
+from django.core.mail import send_mail
+
 
 class ChatMessageListCreateView(generics.ListCreateAPIView):
     serializer_class = ChatMessageSerializer
@@ -22,13 +24,34 @@ class ChatMessageListCreateView(generics.ListCreateAPIView):
         return conversation.messages.order_by('timestamp')
 
     def perform_create(self, serializer):
-        print("FILES:", self.request.FILES)
-        print("DATA:", self.request.data)
         conversation = Conversation.objects.get(id=self.kwargs['conversation_id'])
         serializer.save(
             sender=self.request.user,
             conversation=conversation
         )
+        
+        message = serializer.save(
+            sender=self.request.user,
+            conversation=conversation
+        )
+
+        # 🔑 Wykluczasz nadawcę!
+        recipients = conversation.participants.exclude(id=self.request.user.id)
+
+        for recipient in recipients:
+            if recipient.email:
+                send_mail(
+                    subject="📬 Nowa wiadomość w TickTask",
+                    message=(
+                        f"Cześć {recipient.username},\n\n"
+                        f"Masz nową wiadomość od {self.request.user.username}:\n\n"
+                        f"\"{message.text}\"\n\n"
+                        f"Zaloguj się do TickTask, aby odpowiedzieć!"
+                    ),
+                    from_email='noreply@inqse.com',
+                    recipient_list=[recipient.email],
+                    fail_silently=False
+                )
         
 class ConversationListCreateView(generics.ListCreateAPIView):
     queryset = Conversation.objects.all()
