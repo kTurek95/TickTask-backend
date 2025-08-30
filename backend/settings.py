@@ -48,6 +48,8 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_PAGINATION_CLASS": "api.pagination.StandardResultsSetPagination",
+    "PAGE_SIZE": 10,  # DRF wymaga tej wartości, ale faktycznie sterujemy w klasie wyżej
 }
 
 SIMPLE_JWT = {

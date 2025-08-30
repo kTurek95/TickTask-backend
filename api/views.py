@@ -13,6 +13,7 @@ from collections import Counter
 from .utils import log_activity
 from rest_framework import status
 from django.core.mail import send_mail
+from api.pagination import StandardResultsSetPagination
 
 
 class NoteListCreate(generics.ListCreateAPIView):
@@ -371,50 +372,95 @@ class TaskStatsView(APIView):
 #         return Activity.objects.filter(user=user).order_by("-created_at")
 
 
+from django.utils.dateparse import parse_date
+from django.db.models import Q
+
+# Jeśli nie masz – standardowa paginacja DRF
+# class StandardResultsSetPagination(PageNumberPagination):
+#     page_size = 10
+#     page_size_query_param = "page_size"
+
+def apply_activity_filters(qs, request):
+    """
+    Wspólne filtrowanie dla list aktywności.
+    Oczekiwane query params:
+      - action_icontains: fragment opisu akcji (np. 'Utworzyłeś zadanie')
+      - date_from: 'YYYY-MM-DD'
+      - date_to  : 'YYYY-MM-DD'
+      - username : nazwa użytkownika (dla leader/admin; dla "my-activities" zwykle zbędne)
+    """
+    qp = request.query_params
+
+    action_icontains = qp.get("action_icontains")
+    username = qp.get("username")
+    date_from = qp.get("date_from")
+    date_to = qp.get("date_to")
+
+    if action_icontains:
+        qs = qs.filter(action__icontains=action_icontains)
+
+    if username:
+        qs = qs.filter(user__username=username)
+
+    # Parsowanie dat – filtrujemy po komponencie DATE stempla czasowego
+    df = parse_date(date_from) if date_from else None
+    dt = parse_date(date_to) if date_to else None
+    if df:
+        qs = qs.filter(created_at__date__gte=df)
+    if dt:
+        qs = qs.filter(created_at__date__lte=dt)
+
+    return qs
+
+
 class MyActivityListView(generics.ListAPIView):
     serializer_class = ActivitySerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         user = self.request.user
 
         if user.is_staff and self.request.query_params.get("all") == "true":
-            return Activity.objects.all().order_by("-created_at")
+            qs = Activity.objects.all()
+        else:
+            qs = Activity.objects.filter(user=user)
 
-        return Activity.objects.filter(user=user).order_by("-created_at")
-
+        qs = qs.select_related("user")
+        qs = apply_activity_filters(qs, self.request)
+        return qs.order_by("-created_at")
 
 
 class GroupActivityListView(generics.ListAPIView):
     serializer_class = ActivitySerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         user = self.request.user
 
         if user.is_staff and self.request.query_params.get("all") == "true":
-            return Activity.objects.exclude(user=user).order_by("-created_at")
+            qs = Activity.objects.exclude(user=user)
+        else:
+            # leader: tylko aktywności użytkowników z jego grup
+            is_leader = hasattr(user, "userprofile") and user.userprofile.role == "leader"
+            if is_leader:
+                group_ids = GroupMembership.objects.filter(
+                    user=user, role="leader"
+                ).values_list("group_id", flat=True)
 
-        is_leader = hasattr(user, "userprofile") and user.userprofile.role == "leader"
+                group_user_ids = GroupMembership.objects.filter(
+                    group_id__in=group_ids
+                ).values_list("user_id", flat=True)
 
-        if is_leader:
-            group_ids = GroupMembership.objects.filter(
-                user=user, role="leader"
-            ).values_list("group_id", flat=True)
+                qs = Activity.objects.filter(user__id__in=group_user_ids).exclude(user=user)
+            else:
+                qs = Activity.objects.none()
 
-            group_user_ids = GroupMembership.objects.filter(
-                group_id__in=group_ids
-            ).values_list("user_id", flat=True)
+        qs = qs.select_related("user")
+        qs = apply_activity_filters(qs, self.request)
+        return qs.order_by("-created_at")
 
-            return Activity.objects.filter(
-                user__id__in=group_user_ids
-            ).exclude(user=user).order_by("-created_at")
-
-        return Activity.objects.none()
-
-
-
-    
     
 class TaskSummaryView(APIView):
     permission_classes = [IsAuthenticated]
