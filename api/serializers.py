@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 from .models import Note, Task, Schedule, Comment, Activity, UserProfile
+from django.utils import timezone
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -46,15 +47,18 @@ class TaskSerializer(serializers.ModelSerializer):
         queryset=User.objects.all(), source="assigned_to", write_only=True, required=False
     )
     recent_comments = serializers.SerializerMethodField()
+    deadline = serializers.DateTimeField(required=False, allow_null=True)
+    attachment = serializers.FileField(required=False, allow_null=True)
 
     class Meta:
         model = Task
         fields = [
             "id", "user", "title", "description",
             "is_completed", "created_at", "deadline",
-            "priority", "created_by", "assigned_to", "assigned_to_id", 'recent_comments', 'status'
+            "priority", "created_by", "assigned_to", "assigned_to_id", 'recent_comments', 'status', 'attachment'
         ]
         read_only_fields = ["id", "created_at", "created_by", "assigned_to", "user"]
+        extra_kwargs = {"deadline" : {"required":False, "allow_null":True}}
 
     def create(self, validated_data):
         request = self.context.get("request")
@@ -114,6 +118,11 @@ class TaskSerializer(serializers.ModelSerializer):
             }
             for comment in recent
         ]
+        
+    def validate_deadline(self, value):
+        if value and value < timezone.now():
+            raise serializers.ValidationError("Deadline nie może być z przeszłości.")
+        return value
 
 
 class ScheduleSerializer(serializers.ModelSerializer):
