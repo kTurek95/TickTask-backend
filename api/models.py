@@ -23,6 +23,7 @@ STATUS_CHOICES = [
         ('completed', 'Ukończone'),
         ('overdue', 'Po terminie'),
         ('upcoming', 'Nadchodzące'),
+        ('no_deadline', "Bez deadlinu")
     ]
 
 class Task(models.Model):
@@ -36,6 +37,7 @@ class Task(models.Model):
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default="Średni")  # <- DODANE
     assigned_to = models.ForeignKey(User, on_delete=models.CASCADE, related_name='assigned_tasks')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='upcoming')
+    attachment = models.FileField(upload_to='user_task_attachments/', blank=True, null=True)
 
     def __str__(self):
         return f"{self.title} ({self.user.username})"
@@ -50,11 +52,11 @@ class Task(models.Model):
                 self.status = 'completed'
             elif self.deadline and self.deadline < now:
                 self.status = 'overdue'
+            elif self.deadline is None:
+                self.status = "no_deadline"
             else:
                 self.status = 'upcoming'
         super().save(*args, **kwargs)
-
-
 
     
 class Schedule(models.Model):
