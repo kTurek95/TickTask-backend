@@ -1,12 +1,11 @@
 from django.shortcuts import render
 from django.contrib.auth.models import User
-from rest_framework import generics,viewsets, permissions, filters
+from rest_framework import generics,viewsets, permissions, filters, decorators
 from .serializers import UserSerializer, NoteSerializer, TaskSerializer, ScheduleSerializer, CommentSerializer, ActivitySerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .models import Note, Task, Schedule, Activity, GroupMembership
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.exceptions import ValidationError
 from .models import Comment
 from django.utils import timezone
 from collections import Counter
@@ -14,7 +13,10 @@ from .utils import log_activity
 from rest_framework import status
 from django.core.mail import send_mail
 from api.pagination import StandardResultsSetPagination
-
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
+from django.utils.dateparse import parse_date
+from django.core.files.storage import default_storage
+from rest_framework.decorators import action
 
 class NoteListCreate(generics.ListCreateAPIView):
     serializer_class = NoteSerializer
@@ -50,6 +52,8 @@ class TaskViewSet(viewsets.ModelViewSet):
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
     
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ['deadline', 'priority', 'status']  # albo inne pola zadań
@@ -227,6 +231,39 @@ class TaskViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         log_activity(self.request.user, f"Usunąłeś zadanie: '{instance.title}'")
         instance.delete()
+        
+    @action(detail=True, methods=["delete"], url_path="attachment")
+    def delete_attachment(self, request, pk=None):
+        task = self.get_object()
+
+        try:
+            f = task.attachment  # FieldFile
+            # nic nie ma -> OK
+            if not f or not getattr(f, "name", None):
+                return Response(status=status.HTTP_204_NO_CONTENT)
+
+            path = f.name  # UŻYWAMY f.name (relatywnej ścieżki), NIE f.path
+
+            # spróbuj usunąć fizyczny plik, ale nie rób z tego błędu
+            try:
+                if default_storage.exists(path):
+                    default_storage.delete(path)
+            except Exception as e_storage:
+                logger.warning("Storage delete warning for %s: %r", path, e_storage)
+
+            # wyczyść pole i zapisz TYLKO to pole
+            task.attachment = None
+            task.save(update_fields=["attachment"])
+
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        except Exception as e:
+            # pełny log do konsoli serwera + zwrot diagnostyki (tymczasowo)
+            logger.exception("Attachment delete failed for task %s", task.pk)
+            return Response(
+                {"detail": f"delete_failed: {type(e).__name__}: {e}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class ScheduleViewSet(viewsets.ModelViewSet):
@@ -370,10 +407,6 @@ class TaskStatsView(APIView):
 
 #         # zwykły user
 #         return Activity.objects.filter(user=user).order_by("-created_at")
-
-
-from django.utils.dateparse import parse_date
-from django.db.models import Q
 
 # Jeśli nie masz – standardowa paginacja DRF
 # class StandardResultsSetPagination(PageNumberPagination):
