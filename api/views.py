@@ -17,6 +17,8 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from django.utils.dateparse import parse_date
 from django.core.files.storage import default_storage
 from rest_framework.decorators import action
+from django.db.models import Count, Q
+
 
 class NoteListCreate(generics.ListCreateAPIView):
     serializer_class = NoteSerializer
@@ -264,6 +266,47 @@ class TaskViewSet(viewsets.ModelViewSet):
                 {"detail": f"delete_failed: {type(e).__name__}: {e}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+            
+    # @action(detail=False, methods=["get"], url_path="metrics")
+    # def metrics(self, request):
+    #     """
+    #     Zwraca metryki dla użytkownika:
+    #     - total: liczba wszystkich zadań
+    #     - completed: ukończone
+    #     - upcoming: nieukończone z deadlinem w przyszłości
+    #     - overdue: nieukończone z deadlinem w przeszłości
+    #     - completion_rate: % ukończenia (0–100)
+    #     Można podać ?user_id=123 (np. dla leadera/admina).
+    #     """
+    #     user = request.user
+    #     user_id = request.query_params.get("user_id")
+    #     if not user_id:
+    #         user_id = user.id
+
+    #     # Jeśli masz uprawnienia/role, możesz tu dodać walidację czy user
+    #     # może oglądać metryki innego usera.
+    #     qs = Task.objects.filter(assigned_to_id=user_id)
+
+    #     now = timezone.now()
+    #     agg = qs.aggregate(
+    #         total=Count("id"),
+    #         completed=Count("id", filter=Q(is_completed=True)),
+    #         upcoming=Count("id", filter=Q(is_completed=False, deadline__gte=now)),
+    #         overdue=Count("id", filter=Q(is_completed=False, deadline__lt=now)),
+    #     )
+
+    #     total = agg["total"] or 0
+    #     completed = agg["completed"] or 0
+    #     rate = round((completed / total) * 100, 1) if total else 0.0
+
+    #     return Response({
+    #         "user_id": int(user_id),
+    #         "total": total,
+    #         "completed": completed,
+    #         "upcoming": agg["upcoming"] or 0,
+    #         "overdue": agg["overdue"] or 0,
+    #         "completion_rate": rate,
+    #     })
 
 
 class ScheduleViewSet(viewsets.ModelViewSet):
@@ -583,3 +626,16 @@ class CompletedTaskViewSet(viewsets.ReadOnlyModelViewSet):
             return qs.filter(assigned_to__id__in=group_user_ids)
 
         return qs.filter(assigned_to=user)
+    
+    
+class ActivityUserView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        usernames = (
+            Activity.objects.filter(user__isnull=False)
+            .values_list("user__username", flat=True)
+            .distinct()
+            .order_by("user__username")
+        )
+        return Response(list(usernames))

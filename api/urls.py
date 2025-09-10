@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import TaskViewSet, ScheduleViewSet, NoteListCreate, NoteDelete, UserListView, MeView, CommentListCreateView, TaskStatsView, MyActivityListView, GroupActivityListView, DashboardStatsView, TaskSummaryView, VisibleUsersView, CompletedTaskViewSet
+from .views import TaskViewSet, ScheduleViewSet, NoteListCreate, NoteDelete, UserListView, MeView, CommentListCreateView, TaskStatsView, MyActivityListView, GroupActivityListView, DashboardStatsView, TaskSummaryView, VisibleUsersView, CompletedTaskViewSet, ActivityUserView
 
 router = DefaultRouter()
 router.register(r'tasks', TaskViewSet, basename='task')
@@ -21,4 +21,5 @@ urlpatterns = [
     path("summary-tasks/", TaskSummaryView.as_view()),
     path('visible-users/', VisibleUsersView.as_view(), name='visible-users'),
     path("completed-tasks/", CompletedTaskViewSet.as_view({"get": "list"})),
+    path("activity-users/", ActivityUserView.as_view(), name="activity-users"),
 ]
